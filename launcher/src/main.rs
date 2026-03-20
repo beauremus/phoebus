@@ -43,7 +43,13 @@ fn register_protocol() -> Result<(), Box<dyn std::error::Error>> {
 
     let (cmd_key, _) = key.create_subkey("shell\\open\\command")?;
     let current_exe = env::current_exe()?;
-    cmd_key.set_value("", &format!("\"{}\" \"%1\"", current_exe.to_str().unwrap()))?;
+    let current_exe_str = current_exe.to_str().ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "Executable path is not valid UTF-8",
+        )
+    })?;
+    cmd_key.set_value("", &format!("\"{}\" \"%1\"", current_exe_str))?;
     Ok(())
 }
 
@@ -52,10 +58,16 @@ fn register_protocol() -> Result<(), Box<dyn std::error::Error>> {
     let home = env::var("HOME")?;
     let desktop_dir = format!("{}/.local/share/applications", home);
     let current_exe = env::current_exe()?;
+    let current_exe_str = current_exe.to_str().ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "Executable path is not valid UTF-8",
+        )
+    })?;
 
     let content = format!(
         "[Desktop Entry]\nType=Application\nName=Phoebus Launcher\nExec={} %u\nMimeType=x-scheme-handler/phoebus;\nNoDisplay=true",
-        current_exe.to_str().unwrap()
+        current_exe_str
     );
 
     let desktop_file_name = "phoebus.desktop";
