@@ -58,10 +58,18 @@ fn register_protocol() -> Result<(), Box<dyn std::error::Error>> {
         current_exe.to_str().unwrap()
     );
 
+    let desktop_file_name = "phoebus.desktop";
+    let desktop_file_path = format!("{}/{}", desktop_dir, desktop_file_name);
+
     std::fs::create_dir_all(&desktop_dir)?;
-    std::fs::write(format!("{}/phoebus.desktop", desktop_dir), content)?;
+    std::fs::write(&desktop_file_path, content)?;
     Command::new("update-desktop-database")
         .arg(&desktop_dir)
+        .status()?;
+    Command::new("xdg-mime")
+        .arg("default")
+        .arg(desktop_file_name)
+        .arg("x-scheme-handler/phoebus")
         .status()?;
     Ok(())
 }
