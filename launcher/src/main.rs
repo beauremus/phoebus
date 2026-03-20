@@ -43,7 +43,13 @@ fn register_protocol() -> Result<(), Box<dyn std::error::Error>> {
 
     let (cmd_key, _) = key.create_subkey("shell\\open\\command")?;
     let current_exe = env::current_exe()?;
-    cmd_key.set_value("", &format!("\"{}\" \"%1\"", current_exe.to_str().unwrap()))?;
+    let current_exe_str = current_exe.to_str().ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "Executable path is not valid UTF-8",
+        )
+    })?;
+    cmd_key.set_value("", &format!("\"{}\" \"%1\"", current_exe_str))?;
     Ok(())
 }
 
@@ -52,6 +58,12 @@ fn register_protocol() -> Result<(), Box<dyn std::error::Error>> {
     let home = env::var("HOME")?;
     let desktop_dir = format!("{}/.local/share/applications", home);
     let current_exe = env::current_exe()?;
+    let current_exe_str = current_exe.to_str().ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "Executable path is not valid UTF-8",
+        )
+    })?;
 
     let exe_str = current_exe.to_str().ok_or_else(|| {
         std::io::Error::new(
@@ -69,10 +81,18 @@ fn register_protocol() -> Result<(), Box<dyn std::error::Error>> {
         quoted_exe
     );
 
+    let desktop_file_name = "phoebus.desktop";
+    let desktop_file_path = format!("{}/{}", desktop_dir, desktop_file_name);
+
     std::fs::create_dir_all(&desktop_dir)?;
-    std::fs::write(format!("{}/phoebus.desktop", desktop_dir), content)?;
+    std::fs::write(&desktop_file_path, content)?;
     Command::new("update-desktop-database")
         .arg(&desktop_dir)
+        .status()?;
+    Command::new("xdg-mime")
+        .arg("default")
+        .arg(desktop_file_name)
+        .arg("x-scheme-handler/phoebus")
         .status()?;
     Ok(())
 }
@@ -104,6 +124,14 @@ fn desktop_entry_quote(s: &str) -> String {
     out
 }
 
+#[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
+fn register_protocol() -> Result<(), Box<dyn std::error::Error>> {
+    Err(
+        "Protocol registration is not supported on this operating system. \
+         Please run this launcher on Windows, Linux, or macOS."
+            .into(),
+    )
+}
 fn launch_phoebus(resource_path: &str) {
     let exe_path = env::current_exe().expect("Failed to get current exe path");
     let bin_dir = exe_path.parent().expect("Failed to get exe directory");
@@ -113,11 +141,10 @@ fn launch_phoebus(resource_path: &str) {
         let script_path = bin_dir.join("phoebus.bat");
         Command::new("cmd")
             .arg("/c")
-            .arg(format!(
-                "\"{}\" -server -resource \"{}\"",
-                script_path.display(),
-                resource_path
-            ))
+            .arg(&script_path)
+            .arg("-server")
+            .arg("-resource")
+            .arg(resource_path)
             .spawn()
             .expect("Failed to launch Phoebus batch script");
     }
