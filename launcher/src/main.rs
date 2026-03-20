@@ -1,5 +1,6 @@
 use std::env;
 use std::process::Command;
+use urlencoding::decode;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -22,7 +23,12 @@ fn main() {
     }
 
     let raw_uri = &args[1];
-    launch_phoebus(raw_uri);
+    let clean_uri = raw_uri
+        .trim_start_matches("phoebus://")
+        .trim_start_matches("phoebus:");
+    let decoded_path = decode(clean_uri).unwrap_or(clean_uri.into()).into_owned();
+
+    launch_phoebus(&decoded_path);
 }
 
 #[cfg(target_os = "windows")]
@@ -68,33 +74,32 @@ fn register_protocol() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn launch_phoebus(uri: &str) {
-    let clean_path = uri
-        .trim_start_matches("phoebus://")
-        .trim_start_matches("phoebus:");
-    let exe_dir = env::current_exe().unwrap().parent().unwrap().to_path_buf();
+fn launch_phoebus(resource_path: &str) {
+    let exe_path = env::current_exe().expect("Failed to get current exe path");
+    let bin_dir = exe_path.parent().expect("Failed to get exe directory");
 
     #[cfg(target_os = "windows")]
     {
-        let script_path = exe_dir.join("phoebus.bat");
+        let script_path = bin_dir.join("phoebus.bat");
         Command::new("cmd")
             .arg("/c")
-            .arg(script_path)
-            .arg("-server")
-            .arg("-resource")
-            .arg(clean_path)
+            .arg(format!(
+                "\"{}\" -server -resource \"{}\"",
+                script_path.display(),
+                resource_path
+            ))
             .spawn()
             .expect("Failed to launch Phoebus batch script");
     }
 
     #[cfg(not(target_os = "windows"))]
     {
-        let script_path = exe_dir.join("phoebus.sh");
+        let script_path = bin_dir.join("phoebus.sh");
         // We call the script directly instead of 'sh -c' to ensure args forward correctly
         Command::new(script_path)
             .arg("-server")
             .arg("-resource")
-            .arg(clean_path)
+            .arg(resource_path)
             .spawn()
             .expect("Failed to launch Phoebus shell script");
     }

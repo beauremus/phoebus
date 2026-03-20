@@ -1,68 +1,124 @@
 name: Final Distribution Packaging
 
 on:
-  workflow_run:
-    workflows: ["Phoebus build", "Launcher Build"]
-    types:
-      - completed
+  push:
+    branches: ["master"]
+  pull_request:
+    branches: ["master"]
+  workflow_dispatch:
 
 jobs:
-  bundle:
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
-    runs-on: ${{ matrix.os }}
+  build-phoebus:
     strategy:
+      fail-fast: false
+      matrix:
+        os: ["ubuntu-latest", "windows-latest", "macos-latest"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Maven and Java
+        uses: s4u/setup-maven-action@v1.18.0
+        with:
+          java-version: "17"
+          maven-version: "3.9.6"
+
+      - name: Build Phoebus
+        run: mvn --batch-mode install -DskipTests
+
+      - name: Upload Phoebus Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: phoebus-product-${{ matrix.os }}
+          path: |
+            phoebus-product/target/*.tar.gz
+            phoebus-product/target/*.zip
+
+  build-launcher:
+    strategy:
+      fail-fast: false
       matrix:
         include:
           - os: windows-latest
-            launcher_name: launcher-windows-latest
+            artifact_name: phoebus-launcher.exe
           - os: ubuntu-latest
-            launcher_name: launcher-ubuntu-latest
+            artifact_name: phoebus-launcher-linux
           - os: macos-latest
-            launcher_name: launcher-macos-latest
-
+            artifact_name: phoebus-launcher-mac
+    runs-on: ${{ matrix.os }}
     steps:
-      - name: Download Phoebus Artifacts
+      - uses: actions/checkout@v4
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Build Launcher
+        run: |
+          cd launcher
+          cargo build --release
+      - name: Rename and Prepare Binary
+        shell: bash
+        run: |
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            cp launcher/target/release/launcher.exe ${{ matrix.artifact_name }}
+          else
+            cp launcher/target/release/launcher ${{ matrix.artifact_name }}
+          fi
+      - name: Upload Launcher Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: launcher-${{ matrix.os }}
+          path: ${{ matrix.artifact_name }}
+
+  package:
+    needs: [build-phoebus, build-launcher]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            launcher_artifact: launcher-windows-latest
+            launcher_binary: phoebus-launcher.exe
+          - os: ubuntu-latest
+            launcher_artifact: launcher-ubuntu-latest
+            launcher_binary: phoebus-launcher-linux
+          - os: macos-latest
+            launcher_artifact: launcher-macos-latest
+            launcher_binary: phoebus-launcher-mac
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Download Phoebus Product
         uses: actions/download-artifact@v4
         with:
-          name: Phoebus product ${{ matrix.os }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          run-id: ${{ github.event.workflow_run.id }}
+          name: phoebus-product-${{ matrix.os }}
 
-      - name: Download Launcher Artifacts
+      - name: Download Rust Launcher
         uses: actions/download-artifact@v4
         with:
-          name: ${{ matrix.launcher_name }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          name: ${{ matrix.launcher_artifact }}
 
-      - name: Create Unified Bundle (Windows)
+      - name: Package Windows
         if: matrix.os == 'windows-latest'
         run: |
           mkdir dist
           Expand-Archive -Path *.zip -DestinationPath dist/
-          Move-Item -Path phoebus-launcher.exe -Destination dist/
+          Move-Item -Path ${{ matrix.launcher_binary }} -Destination dist/
           Compress-Archive -Path dist/* -DestinationPath Phoebus-Full-Windows.zip
 
-      - name: Create Unified Bundle (Linux)
+      - name: Package Linux
         if: matrix.os == 'ubuntu-latest'
         run: |
           mkdir dist
           tar -xzf *.tar.gz -C dist/
-          mv phoebus-launcher-linux dist/phoebus-launcher
+          mv ${{ matrix.launcher_binary }} dist/phoebus-launcher
           chmod +x dist/phoebus-launcher
           tar -czf Phoebus-Full-Linux.tar.gz -C dist/ .
 
       - name: Package macOS
         if: matrix.os == 'macos-latest'
         run: |
-          mkdir -p "Phoebus Launcher.app/Contents/MacOS"
-          mkdir -p "Phoebus Launcher.app/Contents/Resources"
-
-          # Move the Rust launcher into the App structure
-          mv phoebus-launcher-mac "Phoebus Launcher.app/Contents/MacOS/phoebus-launcher"
-          chmod +x "Phoebus Launcher.app/Contents/MacOS/phoebus-launcher"
-
-          # Create the Info.plist that registers the URI
-          cat <<EOF > "Phoebus Launcher.app/Contents/Info.plist"
+          mkdir -p "Phoebus.app/Contents/MacOS"
+          mv ${{ matrix.launcher_binary }} "Phoebus.app/Contents/MacOS/phoebus-launcher"
+          chmod +x "Phoebus.app/Contents/MacOS/phoebus-launcher"
+          tar -xzf *.tar.gz -C "Phoebus.app/Contents/MacOS/"
+          cat <<EOF > "Phoebus.app/Contents/Info.plist"
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
@@ -71,6 +127,12 @@ jobs:
               <string>phoebus-launcher</string>
               <key>CFBundleIdentifier</key>
               <string>org.phoebus.launcher</string>
+              <key>CFBundleName</key>
+              <string>Phoebus Launcher</string>
+              <key>CFBundlePackageType</key>
+              <string>APPL</string>
+              <key>CFBundleShortVersionString</key>
+              <string>1.0</string>
               <key>CFBundleURLTypes</key>
               <array>
                   <dict>
@@ -85,11 +147,12 @@ jobs:
           </dict>
           </plist>
           EOF
+          zip -r Phoebus-Full-Mac.zip "Phoebus.app"
 
-          zip -r Phoebus-Full-Mac.zip "Phoebus Launcher.app"
-
-      - name: Upload Final Release
+      - name: Upload Final Release Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Full-Distribution-${{ matrix.os }}
-          path: Phoebus-Full-*
+          name: Full-Release-${{ matrix.os }}
+          path: |
+            Phoebus-Full-*.zip
+            Phoebus-Full-*.tar.gz

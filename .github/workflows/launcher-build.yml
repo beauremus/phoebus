@@ -35,6 +35,15 @@ jobs:
           cd launcher
           cargo build --release
 
+      - name: Prepare Binary
+        shell: bash
+        run: |
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            cp launcher/target/release/launcher.exe ${{ matrix.artifact_name }}
+          else
+            cp launcher/target/release/launcher ${{ matrix.artifact_name }}
+          fi
+
       - name: Upload Launcher Artifact
         uses: actions/upload-artifact@v4
         with:
