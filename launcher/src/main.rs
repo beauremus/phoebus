@@ -99,11 +99,10 @@ fn launch_phoebus(resource_path: &str) {
         let script_path = bin_dir.join("phoebus.bat");
         Command::new("cmd")
             .arg("/c")
-            .arg(format!(
-                "\"{}\" -server -resource \"{}\"",
-                script_path.display(),
-                resource_path
-            ))
+            .arg(&script_path)
+            .arg("-server")
+            .arg("-resource")
+            .arg(resource_path)
             .spawn()
             .expect("Failed to launch Phoebus batch script");
     }
