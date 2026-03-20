@@ -68,6 +68,10 @@ fn register_protocol() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+// This is a fire-and-forget launcher: we spawn Phoebus and exit immediately.
+// When this process exits the spawned child is reparented to init/PID 1 on
+// Unix-like systems and will be reaped normally; no zombie is left behind.
+#[allow(clippy::zombie_processes)]
 fn launch_phoebus(uri: &str) {
     let clean_path = uri
         .trim_start_matches("phoebus://")
