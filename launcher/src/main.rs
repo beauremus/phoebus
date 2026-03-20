@@ -82,6 +82,14 @@ fn register_protocol() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+#[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
+fn register_protocol() -> Result<(), Box<dyn std::error::Error>> {
+    Err(
+        "Protocol registration is not supported on this operating system. \
+         Please run this launcher on Windows, Linux, or macOS."
+            .into(),
+    )
+}
 fn launch_phoebus(resource_path: &str) {
     let exe_path = env::current_exe().expect("Failed to get current exe path");
     let bin_dir = exe_path.parent().expect("Failed to get exe directory");
