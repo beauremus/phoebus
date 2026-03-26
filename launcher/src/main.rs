@@ -106,6 +106,23 @@ fn launch_phoebus(resource_path: &str) {
     let exe_path = env::current_exe().expect("Failed to get current exe path");
     let bin_dir = exe_path.parent().expect("Failed to get exe directory");
 
+    let mut script_path = bin_dir.join("phoebus.sh");
+
+    if !script_path.exists() {
+        if let Ok(entries) = std::fs::read_dir(bin_dir) {
+            for entry in entries.flatten() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if name.starts_with("product-") {
+                    let potential_path = entry.path().join("phoebus.sh");
+                    if potential_path.exists() {
+                        script_path = potential_path;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
     #[cfg(target_os = "windows")]
     {
         let script_path = bin_dir.join("phoebus.bat");
