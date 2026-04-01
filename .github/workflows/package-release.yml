@@ -97,10 +97,12 @@ jobs:
       - name: Package Windows
         if: matrix.os == 'windows-latest'
         run: |
-          mkdir dist
-          Expand-Archive -Path *.zip -DestinationPath dist/
-          Move-Item -Path ${{ matrix.launcher_binary }} -Destination dist/
-          Compress-Archive -Path dist/* -DestinationPath Phoebus-Full-Windows.zip
+          Expand-Archive -Path *.zip -DestinationPath dist_temp\
+          $innerDir = Get-ChildItem dist_temp -Directory | Select-Object -First 1
+          New-Item -ItemType Directory -Path dist
+          Move-Item -Path "$($innerDir.FullName)\*" -Destination dist\
+          Move-Item -Path ${{ matrix.launcher_binary }} -Destination dist\
+          Compress-Archive -Path dist\* -DestinationPath Phoebus-Full-Windows.zip
 
       - name: Package Linux
         if: matrix.os == 'ubuntu-latest'
