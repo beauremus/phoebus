@@ -65,9 +65,13 @@ fn register_protocol() -> Result<(), Box<dyn std::error::Error>> {
         )
     })?;
 
+    // Per the Desktop Entry Specification, the Exec value must be quoted and
+    // special characters escaped when the path contains spaces or shell metacharacters.
+    let quoted_exe = desktop_entry_quote(current_exe_str);
+
     let content = format!(
         "[Desktop Entry]\nType=Application\nName=Phoebus Launcher\nExec={} %u\nMimeType=x-scheme-handler/phoebus;\nNoDisplay=true",
-        current_exe_str
+        quoted_exe
     );
 
     let desktop_file_name = "phoebus.desktop";
@@ -92,6 +96,26 @@ fn register_protocol() -> Result<(), Box<dyn std::error::Error>> {
     // We just return Ok so the launcher can still be run to verify paths.
     println!("macOS detected: Registration is handled via the App Bundle structure.");
     Ok(())
+}
+
+/// Quote a path for use in a Desktop Entry `Exec` field per the Desktop Entry Specification.
+/// Wraps the value in double-quotes and escapes the characters that must be escaped inside
+/// double-quoted strings: `"`, `` ` ``, `$`, and `\`.
+#[cfg(target_os = "linux")]
+fn desktop_entry_quote(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 2);
+    out.push('"');
+    for ch in s.chars() {
+        match ch {
+            '"' | '`' | '$' | '\\' => {
+                out.push('\\');
+                out.push(ch);
+            }
+            _ => out.push(ch),
+        }
+    }
+    out.push('"');
+    out
 }
 
 #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
