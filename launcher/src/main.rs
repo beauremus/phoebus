@@ -101,6 +101,7 @@ fn register_protocol() -> Result<(), Box<dyn std::error::Error>> {
 /// Quote a path for use in a Desktop Entry `Exec` field per the Desktop Entry Specification.
 /// Wraps the value in double-quotes and escapes the characters that must be escaped inside
 /// double-quoted strings: `"`, `` ` ``, `$`, and `\`.
+#[cfg(target_os = "linux")]
 fn desktop_entry_quote(s: &str) -> String {
     let mut out = String::with_capacity(s.len() + 2);
     out.push('"');
