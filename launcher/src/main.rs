@@ -65,16 +65,9 @@ fn register_protocol() -> Result<(), Box<dyn std::error::Error>> {
         )
     })?;
 
-    let exe_str = current_exe.to_str().ok_or_else(|| {
-        std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "Executable path contains non-UTF-8 characters",
-        )
-    })?;
-
     // Per the Desktop Entry Specification, the Exec value must be quoted and
     // special characters escaped when the path contains spaces or shell metacharacters.
-    let quoted_exe = desktop_entry_quote(exe_str);
+    let quoted_exe = desktop_entry_quote(current_exe_str);
 
     let content = format!(
         "[Desktop Entry]\nType=Application\nName=Phoebus Launcher\nExec={} %u\nMimeType=x-scheme-handler/phoebus;\nNoDisplay=true",
